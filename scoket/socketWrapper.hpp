@@ -17,6 +17,7 @@ class SocketException : public std::exception {
 class Socket {
    public:
     Socket(int fd);
+    Socket();
     ~Socket();
     void send(std::string msg);
     std::string recv(uint16_t len);
@@ -34,6 +35,6 @@ class ClientSocket : public Socket {
 class ServerSocket : public Socket {
    public:
     ServerSocket(std::string hostname, uint16_t port);
-    Socket acceptClient();
+    Socket* acceptClient();
     ~ServerSocket();
 };

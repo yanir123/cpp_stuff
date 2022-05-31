@@ -10,7 +10,7 @@ Socket::~Socket() {
     }
 }
 
-ClientSocket::ClientSocket(std::string hostname, uint16_t port) {
+ClientSocket::ClientSocket(std::string hostname, uint16_t port) : Socket() {
     struct hostent* server;
     struct sockaddr_in serv_addr;
 
@@ -59,11 +59,7 @@ std::string Socket::recv(uint16_t len) {
     return res;
 }
 
-ClientSocket::~ClientSocket() {
-    close(this->socketFd);
-}
-
-ServerSocket::ServerSocket(std::string hostname, uint16_t port) {
+ServerSocket::ServerSocket(std::string hostname, uint16_t port) : Socket() {
     struct sockaddr_in serv_addr;
 
     this->socketFd = socket(AF_INET, SOCK_STREAM, 0);
@@ -83,7 +79,7 @@ ServerSocket::ServerSocket(std::string hostname, uint16_t port) {
     listen(this->socketFd, 5);
 }
 
-Socket ServerSocket::acceptClient() {
+Socket* ServerSocket::acceptClient() {
     struct sockaddr_in cli_addr;
     socklen_t clilen;
 
@@ -93,5 +89,5 @@ Socket ServerSocket::acceptClient() {
         throw SocketException();
     }
 
-    return Socket(clientScokFd);
+    return new Socket(clientScokFd);
 }
