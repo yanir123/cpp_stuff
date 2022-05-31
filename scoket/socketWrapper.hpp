@@ -29,12 +29,10 @@ class Socket {
 class ClientSocket : public Socket {
    public:
     ClientSocket(std::string hostname, uint16_t port);
-    ~ClientSocket();
 };
 
 class ServerSocket : public Socket {
    public:
     ServerSocket(std::string hostname, uint16_t port);
     Socket* acceptClient();
-    ~ServerSocket();
 };
