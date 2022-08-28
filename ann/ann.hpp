@@ -1,3 +1,6 @@
+#ifndef ANN
+#define ANN
+
 #include <eigen3/Eigen/Eigen>
 #include <iostream>
 #include <fstream>
@@ -32,3 +35,5 @@ public:
 
 void genData(std::string filename);
 void ReadCSV(std::string filename, std::vector<RowVector*>& data);
+
+#endif
