@@ -1,3 +1,6 @@
+#ifndef SOCKET_WRAPPER
+#define SOCKET_WRAPPER
+
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -36,3 +39,5 @@ class ServerSocket : public Socket {
     ServerSocket(std::string hostname, uint16_t port);
     Socket* acceptClient();
 };
+
+#endif
