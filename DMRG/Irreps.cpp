@@ -195,6 +195,10 @@ void Irreps::symmFillArray(int* const arr) const {
     }
 }
 
+int Irreps::directProduct(const int irrepFirst, const int irrepSecond) {
+    return irrepFirst ^ irrepSecond;
+}
+
 void Irreps::symmFillArray(int* const arr, const std::string symmLabel) {
     if (symmLabel.compare("c1") == 0) {
         arr[0] = 1;
