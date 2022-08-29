@@ -24,7 +24,7 @@ class Irreps {
     int getGroupNumber() const;
     int numberOfIrreps() const;
     
-    std::string groupName();
+    std::string groupName() const;
     std::string irrepName(const int irrep) const;
     
     void symmFillArray(int* const arr) const;
