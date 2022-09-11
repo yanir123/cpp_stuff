@@ -1,3 +1,5 @@
+#pragma once
+
 class Davidson {
    private:
     int vectorLength;

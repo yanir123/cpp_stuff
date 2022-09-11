@@ -257,7 +257,7 @@ double Davidson::DiagonalizeSmallMatrixAndCalcResidual() {
         double set = 0.0;
         char trans = 'T';
         char notra = 'N';
-        dgemm_(&trans, &notra, &this->vectorsNumber, this->mXMatrixVectors, &this->maxVectorsNumber, this->mXMatrixEigens, this->mXMatrixWork, &this->mXMatrixWorkLength, &info);
+        dgemm_(&trans, &notra, &this->vectorsNumber, &increment, &this->vectorsNumber, &one, this->mXMatrixVectors, &this->maxVectorsNumber, this->mXMatrixRhs, &this->maxVectorsNumber, &set, this->mXMatrixWork, &this->maxVectorsNumber);
 
         for (int i = 0; i < this->vectorsNumber; i++) {
             double currentEigenValue = this->mXMatrixEigens[i];
@@ -283,7 +283,7 @@ double Davidson::DiagonalizeSmallMatrixAndCalcResidual() {
         this->uVector[i] = 0.0;
     }
 
-    for (int i = 0; i< this->vectorsNumber; i++) {
+    for (int i = 0; i < this->vectorsNumber; i++) {
         double alpha = this->mXMatrixVectors[i];
         daxpy_(&this->vectorLength, &alpha, this->hVectors[i], &increment, this->tVector, &increment);
         daxpy_(&this->vectorLength, &alpha, this->vectors[i], &increment, this->uVector, &increment);
@@ -301,13 +301,204 @@ double Davidson::DiagonalizeSmallMatrixAndCalcResidual() {
 }
 
 void Davidson::CalculateNewVector() {
+    int increment = 1;
+    const double shift = this->problemType == 'E' ? this->mXMatrixEigens[0] : 0.0;
+
+    for (int i = 0; i < this->vectorLength; i++) {
+        const double difference = this->diag[i] - shift;
+        const double fabsDifference = fabs(difference);
+
+        if (fabsDifference > this->diagCutoff) {
+            this->workVector[i] = this->uVector[i] / difference;
+        } else {
+            this->workVector[i] = this->uVector[i] / this->diagCutoff;
+        }
+
+        if (this->debugPrint) {
+            std::cout << "WARNING AT DAVIDSON : fabs( precon[" << i << "] ) = " << fabsDifference << std::endl;
+        }
+    }
+
+    double alpha = ddot_(&this->vectorLength, this->workVector, &increment, this->tVector, &increment) / ddot_(&this->vectorLength, this->workVector, &increment, this->uVector, &increment);
+    daxpy_(&this->vectorLength, &alpha, this->uVector, &increment, this->tVector, &increment);
+
+    for (int i = 0; i < this->vectorLength; i++) {
+        const double difference = this->diag[i] - shift;
+        const double fabsDifference = fabs(difference);
+
+        if (fabsDifference > this->diagCutoff) {
+            this->tVector[i] = -this->tVector[i] / difference;
+        } else {
+            this->tVector[i] = -this->tVector[i] / this->diagCutoff;
+        }
+    }
 }
 
 void Davidson::Deflation() {
+    int increment = 1;
+
+    if (this->keepVectorsNumber <= 1) {
+        double alpha = 1.0 / this->FrobeniusNorm(this->uVector);
+        dscal_(&this->vectorLength, &alpha, this->uVector, &increment);
+        dcopy_(&this->vectorLength, uVector, &increment, this->vectors[0], &increment);
+    } else {
+        if (this->problemType == 'L') {
+            this->SolveLinearSystemDeflation(this->keepVectorsNumber);
+        }
+
+        this->ReorthoEigensVectors = this->ReorthoEigensVectors == nullptr ? new double[this->vectorLength * this->keepVectorsNumber] : this->ReorthoEigensVectors;
+        this->ReorthoOverlap = this->ReorthoOverlap == nullptr ? new double[this->keepVectorsNumber * this->keepVectorsNumber] : this->ReorthoOverlap;
+        this->ReorthoOverlapEigens = this->ReorthoOverlapEigens == nullptr ? new double[this->keepVectorsNumber] : this->ReorthoOverlapEigens;
+        this->ReorthoLowdin = this->ReorthoLowdin == nullptr ? new double[this->keepVectorsNumber * this->keepVectorsNumber] : this->ReorthoLowdin;
+
+        dcopy_(&this->vectorLength, this->uVector, &increment, this->ReorthoEigensVectors, &increment);
+        for (int i = 0; i < this->keepVectorsNumber; i++) {
+            for (int j = 0; j < this->vectorLength; j++) {
+                this->ReorthoEigensVectors[j + this->vectorLength * i] = 0.0;
+                for (int k = 0; k < this->vectorLength; k++) {
+                    this->ReorthoEigensVectors[j + this->vectorLength * i] += this->vectors[k][j] * this->mXMatrixVectors[k + this->maxVectorsNumber * i];
+                }
+            }
+        }
+
+        char trans = 'T';
+        char notr = 'N';
+        double one = 1.0;
+        double zero = 0.0;  //set
+        dgemm_(&trans, &notr, &this->keepVectorsNumber, &this->keepVectorsNumber, &this->vectorLength, &one, this->ReorthoEigensVectors, &this->vectorLength, this->ReorthoEigensVectors, &this->vectorLength, &zero, this->ReorthoOverlap, &this->keepVectorsNumber);
+
+        char jobz = 'V';
+        char uplo = 'U';
+        int info;
+        dsyev_(&jobz, &uplo, &this->keepVectorsNumber, this->ReorthoOverlap, &this->keepVectorsNumber, &this->ReorthoOverlapEigens, this->mXMatrixWork, &this->mXMatrixWorkLength, &info);
+        for (int i = 0; i < this->keepVectorsNumber; i++) {
+            this->ReorthoOverlapEigens[i] = pow(this->ReorthoOverlapEigens[i], -0.25);
+            dscal_(&this->keepVectorsNumber, this->ReorthoOverlapEigens + i, this->ReorthoOverlap + this->keepVectorsNumber * i, &increment);
+        }
+
+        dgemm_(&notr, &trans, &this->keepVectorsNumber, &this->keepVectorsNumber, &this->keepVectorsNumber, &one, this->ReorthoOverlap, &this->keepVectorsNumber, this->ReorthoOverlap, &this->keepVectorsNumber, &zero, this->ReorthoLowdin, &this->keepVectorsNumber);
+
+        for (int i = 0; i < this->keepVectorsNumber; i++) {
+            for (int j = 0; j < this->vectorLength; j++) {
+                this->vectors[i][j] = 0.0;
+            }
+
+            for (int j = 0; j < this->keepVectorsNumber; j++) {
+                daxpy_(&this->vectorLength, this->ReorthoLowdin + j + this->keepVectorsNumber * i, this->ReorthoEigensVectors + this->vectorLength * j, &increment, this->vectors[i], &increment);
+            }
+        }
+    }
+
+    this->vectorsNumber = 0;
 }
 
 void Davidson::MxMafterDeflation() {
+    int increment = 1;
+
+    if (this->problemType == 'E') {
+        for (int i = 0; i < this->keepVectorsNumber; i++) {
+            for (int j = i; j < this->keepVectorsNumber; j++) {
+                this->mXMatrix[i + this->maxVectorsNumber * j] = ddot_(&this->vectorLength, this->vectors[i], &increment, this->hVectors[j], &increment);
+                this->mXMatrix[j + this->maxVectorsNumber * i] = this->mXMatrix[i + this->maxVectorsNumber * j];
+            }
+        }
+    } else {
+        for (int i = 0; i < this->keepVectorsNumber; i++) {
+            for (int j = i; j < this->keepVectorsNumber; j++) {
+                this->mXMatrix[i + this->maxVectorsNumber * j] = ddot_(&this->vectorLength, this->hVectors[i], &increment, this->hVectors[j], &increment);
+                this->mXMatrix[j + this->maxVectorsNumber * i] = this->mXMatrix[i + this->maxVectorsNumber * j];
+            }
+        }
+        for (int i = 0; i < this->keepVectorsNumber; i++) {
+            this->mXMatrixRhs[i] = ddot_(&this->vectorLength, this->hVectors[i], &increment, this->rhs, &increment);
+        }
+    }
 }
 
 void Davidson::SolveLinearSystemDeflation(const int SOLUTIONS_NUMBER) {
+    assert(this->problemType == 'L');
+    assert(this->vectorsNumber == this->maxVectorsNumber);
+    assert(SOLUTIONS_NUMBER <= this->maxVectorsNumber);
+    assert(SOLUTIONS_NUMBER >= 2);
+
+    double* firstWork = new double[this->maxVectorsNumber * this->maxVectorsNumber];
+    double* secondWork = new double[this->maxVectorsNumber * this->maxVectorsNumber];
+    double* thirdWork = new double[this->maxVectorsNumber * SOLUTIONS_NUMBER];
+
+    for (int solution = 0; solution < SOLUTIONS_NUMBER; solution++) {
+        for (int i = 0; i < this->maxVectorsNumber * this->maxVectorsNumber; i++) {
+            firstWork[i] = 0.0;
+        }
+
+        for (int diag = 0; diag < this->maxVectorsNumber; diag++) {
+            firstWork[diag * (1 + this->maxVectorsNumber)] = 1.0;
+        }
+
+        for (int prev = 0; prev < solution; prev++) {
+            for (int i = 0; i < this->maxVectorsNumber; i++) {
+                for (int j = 0; j < this->maxVectorsNumber; j++) {
+                    firstWork[i + this->maxVectorsNumber * j] -= secondWork[i + this->maxVectorsNumber * prev] * secondWork[j + this->maxVectorsNumber * prev];
+                }
+            }
+        }
+
+        {
+            double one = 1.0;
+            double set = 0.0;
+            char notrans = 'N';
+            int inc1 = 1;
+            dgemm_(&notrans, &notrans, &this->maxVectorsNumber, &this->maxVectorsNumber, &this->maxVectorsNumber, &one, firstWork, &this->maxVectorsNumber, this->mXMatrix, &this->maxVectorsNumber, &set, thirdWork, &this->maxVectorsNumber);
+            dgemm_(&notrans, &notrans, &this->maxVectorsNumber, &this->maxVectorsNumber, &this->maxVectorsNumber, &one, thirdWork, &this->maxVectorsNumber, firstWork, &this->maxVectorsNumber, &set, this->mXMatrixVectors, &this->maxVectorsNumber);
+            dgemm_(&notrans, &notrans, &this->maxVectorsNumber, &inc1, &this->maxVectorsNumber, &one, firstWork, &this->maxVectorsNumber, this->mXMatrixRhs, &this->maxVectorsNumber, &set, thirdWork, &this->maxVectorsNumber);
+        }
+
+        {
+            char jobz = 'V';
+            char uplo = 'U';
+            int info;
+            dsyev_(&jobz, &uplo, &this->maxVectorsNumber, this->mXMatrixVectors, &this->maxVectorsNumber, this->mXMatrixEigens, this->mXMatrixWork, &this->mXMatrixWorkLength, &info);
+        }
+
+        {
+            double one = 1.0;
+            double set = 0.0;
+            char trans = 'T';
+            char notrans = 'N';
+            int inc1 = 1;
+            dgemm_(&trans, &notrans, &this->maxVectorsNumber, &inc1, &this->maxVectorsNumber, &one, this->mXMatrixVectors, &this->maxVectorsNumber, thirdWork, &this->maxVectorsNumber, &set, this->mXMatrixWork, &this->maxVectorsNumber);
+            for (int diag = 0; diag < this->maxVectorsNumber; diag++) {
+                if (diag < solution) {
+                    this->mXMatrixWork[diag] = 0.0;  // PSEUDOINVERSE
+                } else {
+                    double current_eigenvalue = this->mXMatrixEigens[diag];
+                    if (fabs(current_eigenvalue) < this->diagCutoff) {
+                        current_eigenvalue = this->diagCutoff * ((current_eigenvalue < 0.0) ? -1 : 1);
+                        if (this->debugPrint) {
+                            std::cout << "WARNING AT DAVIDSON : The eigenvalue " << this->mXMatrixEigens[diag] << " to solve Ax = b has been overwritten with " << current_eigenvalue << "." << std::endl;
+                        }
+                    }
+                    this->mXMatrixWork[diag] = this->mXMatrixWork[diag] / current_eigenvalue;
+                }
+            }
+            dgemm_(&notrans, &notrans, &this->maxVectorsNumber, &inc1, &this->maxVectorsNumber, &one, this->mXMatrixVectors, &this->maxVectorsNumber, this->mXMatrixWork, &this->maxVectorsNumber, &set, secondWork + this->maxVectorsNumber * solution, &this->maxVectorsNumber);
+        }
+
+        {
+            int inc1 = 1;
+            double* ptr = secondWork + this->maxVectorsNumber * solution;
+            const double twonorm = sqrt(ddot_(&this->maxVectorsNumber, ptr, &inc1, ptr, &inc1));
+            double factor = 1.0 / twonorm;
+            dscal_(&this->maxVectorsNumber, &factor, ptr, &inc1);
+        }
+
+        {
+            int increment = 1;
+            int size = this->maxVectorsNumber * SOLUTIONS_NUMBER;
+            dcopy_(&size, secondWork, &increment, this->mXMatrixVectors, &increment);
+        }
+    }
+
+    delete[] firstWork;
+    delete[] secondWork;
+    delete[] thirdWork;
 }

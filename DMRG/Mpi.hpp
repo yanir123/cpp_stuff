@@ -1,3 +1,5 @@
+#pragma once
+
 #ifdef CHEMPS2_MPI_COMPILATION
 
 #include <assert.h>
