@@ -1,6 +1,8 @@
 #pragma once
 
 #include <eigen3/unsupported/Eigen/CXX11/Tensor>
+#include <eigen3/Eigen/SVD>
+#include <array>
 
 class Mpo {
    private:
@@ -19,6 +21,9 @@ class Mpo {
     void eigenLanczos(Eigen::Tensor<float, 1> psivec,
                       int maxit = 2,
                       int krydim = 4);
+    static Eigen::Map<const Eigen::MatrixXf> tensorToMatrix(const Eigen::Tensor<float, 2> tensor);
+    static Eigen::TensorMap<const Eigen::Tensor<float, 2>> matrixToTensor(const Eigen::MatrixXf mat);
+    static Eigen::TensorMap<const Eigen::Tensor<float, 1>> vectorToTensor(const Eigen::VectorXf vec);
 
    public:
     Mpo(Eigen::Tensor<float, 3> mpsTensors[],

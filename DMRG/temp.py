@@ -40,7 +40,7 @@ Optional arguments:
         A[p] = utemp.reshape(chil,chid,chir)
         A[p+1] = ncon([np.diag(stemp) @ vhtemp,A[p+1]], [[-1,1],[1,-2,-3]])/LA.norm(stemp)
         L[p+1] = ncon([L[p],M,A[p],np.conj(A[p])],[[2,1,4],[2,-1,3,5],[4,5,-3],[1,3,-2]])
-    
+    ############################################################################
     chil = A[Nsites-1].shape[0]; chir = A[Nsites-1].shape[2]
     utemp, stemp, vhtemp = LA.svd(A[Nsites-1].reshape(chil*chid,chir), full_matrices=False)
     A[Nsites-1] = utemp.reshape(chil,chid,chir)
