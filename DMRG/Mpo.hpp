@@ -1,14 +1,14 @@
 #pragma once
 
-#include <eigen3/unsupported/Eigen/CXX11/Tensor>
-#include <eigen3/Eigen/SVD>
 #include <array>
+#include <eigen3/Eigen/SVD>
+#include <eigen3/unsupported/Eigen/CXX11/Tensor>
+#include <vector>
 
 class Mpo {
    private:
     Eigen::Tensor<float, 3>* left;
     Eigen::Tensor<float, 3>* right;
-    Eigen::Tensor<float, 2> psi;
     Eigen::Tensor<float, 4> mpoTensor;
     double enTemp;
     int numberOfmps;
@@ -18,7 +18,8 @@ class Mpo {
                                      Eigen::Tensor<float, 4> firstMpo,
                                      Eigen::Tensor<float, 4> secondMpo,
                                      Eigen::Tensor<float, 3> right);
-    void eigenLanczos(Eigen::Tensor<float, 1> psivec,
+    Eigen::Tensor<float, 1> eigenLanczos(Eigen::Tensor<float, 1> psivec,
+                      int index,
                       int maxit = 2,
                       int krydim = 4);
     static Eigen::Map<const Eigen::MatrixXf> tensorToMatrix(const Eigen::Tensor<float, 2> tensor);

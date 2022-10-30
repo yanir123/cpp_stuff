@@ -33,3 +33,6 @@
 
 # Logs
 *.log
+
+# Python file
+*.py
